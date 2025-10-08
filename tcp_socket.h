@@ -1,50 +1,52 @@
-// tcp_socket.h
+// tcp_socket.h (Linux/POSIX version)
 #ifndef TCP_SOCKET_H
 #define TCP_SOCKET_H
 
-#include <winsock2.h>
-#include <ws2tcpip.h>
 #include <string>
 #include <memory>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <errno.h>
+#include <string.h>
 
-#pragma comment(lib, "ws2_32.lib")
+// Tag for dispatching to the private constructor
+struct accepted_socket_tag {};
 
-using namespace std;
-
-// TCP Socket 類別，封裝 Windows Socket API
+// TCP Socket class, a wrapper for POSIX Sockets
 class TCPSocket {
 private:
-    SOCKET sock_fd;
+    int sock_fd;
     bool is_server;
-    bool wsa_initialized;
-    bool initialize_wsa();
-    void cleanup_wsa();
+
 public:
-    // 客戶端建構函式
+    // Client constructor
     TCPSocket();    
-    // 伺服器建構函式
-    TCPSocket(int port, const string& host = "0.0.0.0");    
-    // 解構函式
+    // Server constructor
+    TCPSocket(int port, const std::string& host = "0.0.0.0");
+    // Destructor
     ~TCPSocket();    
-    // 連接到伺服器（客戶端）
-    bool connect(const string& host, int port);
-    // 開始監聽（伺服器）
+    // Connect to a server (for clients)
+    bool connect(const std::string& host, int port);
+    // Start listening (for servers)
     bool listen(int backlog = 5);    
-    // 接受客戶端連線（伺服器）
-    unique_ptr<TCPSocket> accept();    
-    // 傳送資料
-    int send(const string& data);
-    // 接收資料
-    string recv(int buffer_size = 1024);    
-    // 關閉連線
+    // Accept a client connection (for servers)
+    std::unique_ptr<TCPSocket> accept();
+    // Send data
+    int send(const std::string& data);
+    // Receive data
+    std::string recv(int buffer_size = 1024);
+    // Close the connection
     void close();    
-    // 檢查 Socket 是否有效
+    // Check if the socket is valid
     bool is_valid() const;
-    // 取得最後的錯誤訊息
-    static string get_last_error();
+    // Get the last error message
+    static std::string get_last_error();
+
 private:
-    // 用於 accept() 建立已連接的 Socket
-    TCPSocket(SOCKET connected_socket);
+    // Private constructor for accepted sockets, using tag dispatch
+    TCPSocket(int connected_socket, accepted_socket_tag);
 };
 
 #endif // TCP_SOCKET_H

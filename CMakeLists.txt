@@ -1,26 +1,31 @@
 cmake_minimum_required(VERSION 3.10)
-project(TCPSocket)
+project(TankGame)
 
-# 設定 C++ 標準
+# Set C++ standard
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread") # Add pthread flag for std::thread
 
-# 編譯伺服器程式
-add_executable(server 
-    server_example.cpp 
+# --- Executables ---
+
+# Server
+add_executable(tank_server
+    tank_server.cpp
     tcp_socket.cpp
 )
-target_link_libraries(server ws2_32)
+# On Linux, threading is handled by pthread, which is enabled by the CXX_FLAG.
+# No extra linking is typically needed for basic sockets, but explicit is better if required.
 
-# 編譯客戶端程式
-add_executable(client 
-    client_example.cpp 
+# Client
+add_executable(tank_client
+    tank_client.cpp
     tcp_socket.cpp
 )
-target_link_libraries(client ws2_32)
+# Link ncurses library to the client
+target_link_libraries(tank_client PRIVATE ncurses)
 
-# 設定輸出目錄（可選）
-set_target_properties(server client
+# Set output directory for executables
+set_target_properties(tank_server tank_client
     PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )

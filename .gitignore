@@ -1,0 +1,18 @@
+# Build artifacts
+/build/
+bin/
+
+# Log files
+*.log
+
+# CMake user files
+CMakeUserPresets.json
+CMakeCache.txt
+CMakeFiles/
+
+# VSCode settings
+.vscode/
+
+# Other
+*.exe
+*.out

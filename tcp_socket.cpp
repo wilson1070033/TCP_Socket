@@ -1,226 +1,175 @@
-// tcp_socket.cpp
+// tcp_socket.cpp (Linux/POSIX version)
 #include "tcp_socket.h"
 #include <iostream>
+#include <stdexcept>
 
-using namespace std;
-
-// 初始化 WSA
-bool TCPSocket::initialize_wsa() {
-    WSADATA wsa_data;
-    int result = WSAStartup(MAKEWORD(2, 2), &wsa_data);
-    if (result != 0) {
-        cerr << "WSAStartup 失敗，錯誤代碼: " << result << endl;
-        return false;
-    }
-    wsa_initialized = true;
-    return true;
-}
-
-// 清理 WSA
-void TCPSocket::cleanup_wsa() {
-    if (wsa_initialized) {
-        WSACleanup();
-        wsa_initialized = false;
-    }
-}
-
-// 客戶端建構函式
+// Client constructor
 TCPSocket::TCPSocket() 
-    : sock_fd(INVALID_SOCKET), is_server(false), wsa_initialized(false) {
-    
-    if (!initialize_wsa()) return;
-    
-    sock_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (sock_fd == INVALID_SOCKET) {
-        cerr << "建立 Socket 失敗: " << get_last_error() << endl;
-        cleanup_wsa();
+    : sock_fd(-1), is_server(false) {
+    sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock_fd < 0) {
+        std::cerr << "Failed to create socket: " << get_last_error() << std::endl;
     }
 }
 
-// 伺服器建構函式
-TCPSocket::TCPSocket(int port, const string& host) 
-    : sock_fd(INVALID_SOCKET), is_server(true), wsa_initialized(false) {
-    
-    if (!initialize_wsa()) return;
-    
-    sock_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (sock_fd == INVALID_SOCKET) {
-        cerr << "建立 Socket 失敗: " << get_last_error() << endl;
-        cleanup_wsa();
+// Server constructor
+TCPSocket::TCPSocket(int port, const std::string& host)
+    : sock_fd(-1), is_server(true) {
+    sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock_fd < 0) {
+        std::cerr << "Failed to create socket: " << get_last_error() << std::endl;
         return;
     }
-    
-    // 允許位址重用
+
+    // Allow address reuse
     int reuse = 1;
-    if (setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, 
-                   (const char*)&reuse, sizeof(reuse)) == SOCKET_ERROR) {
-        cerr << "設定 SO_REUSEADDR 失敗: " << get_last_error() << endl;
+    if (setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) < 0) {
+        std::cerr << "Failed to set SO_REUSEADDR: " << get_last_error() << std::endl;
     }
-    
-    // 設定伺服器位址
+
+    // Set up server address
     sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(port);
-    
     if (inet_pton(AF_INET, host.c_str(), &server_addr.sin_addr) <= 0) {
-        cerr << "無效的 IP 位址: " << host << endl;
+        std::cerr << "Invalid IP address: " << host << std::endl;
         close();
         return;
     }
-    
-    // 綁定 Socket
-    if (::bind(sock_fd, (sockaddr*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
-        cerr << "綁定失敗: " << get_last_error() << endl;
+
+    // Bind the socket
+    if (::bind(sock_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+        std::cerr << "Bind failed: " << get_last_error() << std::endl;
         close();
         return;
     }
 }
 
-// 用於 accept() 的私有建構函式
-TCPSocket::TCPSocket(SOCKET connected_socket) 
-    : sock_fd(connected_socket), is_server(false), wsa_initialized(false) {
+// Private constructor for accepted sockets, using tag dispatch
+TCPSocket::TCPSocket(int connected_socket, accepted_socket_tag)
+    : sock_fd(connected_socket), is_server(false) {
 }
 
-// 解構函式
+// Destructor
 TCPSocket::~TCPSocket() {
     close();
-    cleanup_wsa();
 }
 
-// 連接到伺服器
-bool TCPSocket::connect(const string& host, int port) {
+// Connect to a server
+bool TCPSocket::connect(const std::string& host, int port) {
     if (!is_valid()) {
-        cerr << "Socket 無效" << endl;
+        std::cerr << "Invalid socket" << std::endl;
         return false;
     }
-    
+
     sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(port);
-    
+
     if (inet_pton(AF_INET, host.c_str(), &server_addr.sin_addr) <= 0) {
-        cerr << "無效的 IP 位址: " << host << endl;
+        std::cerr << "Invalid IP address: " << host << std::endl;
         return false;
     }
-    
-    if (::connect(sock_fd, (sockaddr*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR) {
-        cerr << "連接失敗: " << get_last_error() << endl;
+
+    if (::connect(sock_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+        std::cerr << "Connection failed: " << get_last_error() << std::endl;
         return false;
     }
-    
     return true;
 }
 
-// 開始監聽
+// Start listening
 bool TCPSocket::listen(int backlog) {
     if (!is_valid() || !is_server) {
-        cerr << "Socket 無效或非伺服器" << endl;
+        std::cerr << "Invalid socket or not a server" << std::endl;
         return false;
     }
-    
-    if (::listen(sock_fd, backlog) == SOCKET_ERROR) {
-        cerr << "監聽失敗: " << get_last_error() << endl;
+
+    if (::listen(sock_fd, backlog) < 0) {
+        std::cerr << "Listen failed: " << get_last_error() << std::endl;
         return false;
     }
-    
     return true;
 }
 
-// 接受客戶端連線
-unique_ptr<TCPSocket> TCPSocket::accept() {
+// Accept a client connection
+std::unique_ptr<TCPSocket> TCPSocket::accept() {
     if (!is_valid() || !is_server) {
-        cerr << "Socket 無效或非伺服器" << endl;
+        std::cerr << "Invalid socket or not a server" << std::endl;
         return nullptr;
     }
-    
+
     sockaddr_in client_addr;
-    int client_len = sizeof(client_addr);
-    SOCKET client_socket = ::accept(sock_fd, (sockaddr*)&client_addr, &client_len);
-    
-    if (client_socket == INVALID_SOCKET) {
-        cerr << "接受連線失敗: " << get_last_error() << endl;
+    socklen_t client_len = sizeof(client_addr);
+    int client_socket_fd = ::accept(sock_fd, (struct sockaddr*)&client_addr, &client_len);
+
+    if (client_socket_fd < 0) {
+        std::cerr << "Accept failed: " << get_last_error() << std::endl;
         return nullptr;
     }
-    
-    return unique_ptr<TCPSocket>(new TCPSocket(client_socket));
+    // Use the tagged constructor to create the new socket object
+    return std::unique_ptr<TCPSocket>(new TCPSocket(client_socket_fd, accepted_socket_tag{}));
 }
 
-// 傳送資料
-int TCPSocket::send(const string& data) {
+// Send data
+int TCPSocket::send(const std::string& data) {
     if (!is_valid()) {
-        cerr << "Socket 無效" << endl;
+        std::cerr << "Invalid socket" << std::endl;
         return -1;
     }
-    
-    int bytes_sent = ::send(sock_fd, data.c_str(), static_cast<int>(data.length()), 0);
-    
-    if (bytes_sent == SOCKET_ERROR) {
-        cerr << "傳送失敗: " << get_last_error() << endl;
-        return -1;
+
+    int bytes_sent = ::send(sock_fd, data.c_str(), data.length(), 0);
+    if (bytes_sent < 0) {
+        std::cerr << "Send failed: " << get_last_error() << std::endl;
     }
-    
     return bytes_sent;
 }
 
-// 接收資料
-string TCPSocket::recv(int buffer_size) {
+// Receive data
+std::string TCPSocket::recv(int buffer_size) {
     if (!is_valid()) {
-        cerr << "Socket 無效" << endl;
+        std::cerr << "Invalid socket" << std::endl;
         return "";
     }
-    
-    char* buffer = new char[buffer_size + 1];
-    memset(buffer, 0, buffer_size + 1);
-    
+
+    char* buffer = new char[buffer_size];
+    memset(buffer, 0, buffer_size);
+
     int bytes_received = ::recv(sock_fd, buffer, buffer_size, 0);
-    
-    if (bytes_received == SOCKET_ERROR) {
-        cerr << "接收失敗: " << get_last_error() << endl;
+
+    if (bytes_received < 0) {
+        std::cerr << "Receive failed: " << get_last_error() << std::endl;
         delete[] buffer;
         return "";
     }
-    
+
     if (bytes_received == 0) {
+        // Connection closed by peer
         delete[] buffer;
         return "";
     }
-    
-    string result(buffer, bytes_received);
+
+    std::string result(buffer, bytes_received);
     delete[] buffer;
-    
     return result;
 }
 
-// 關閉 Socket
+// Close the socket
 void TCPSocket::close() {
-    if (sock_fd != INVALID_SOCKET) {
-        closesocket(sock_fd);
-        sock_fd = INVALID_SOCKET;
+    if (sock_fd >= 0) {
+        ::close(sock_fd);
+        sock_fd = -1;
     }
 }
 
-// 檢查 Socket 是否有效
+// Check if the socket is valid
 bool TCPSocket::is_valid() const {
-    return sock_fd != INVALID_SOCKET;
+    return sock_fd >= 0;
 }
 
-// 取得錯誤訊息
-string TCPSocket::get_last_error() {
-    int error_code = WSAGetLastError();
-    
-    char* message = nullptr;
-    FormatMessageA(
-        FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-        nullptr,
-        error_code,
-        MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-        (LPSTR)&message,
-        0,
-        nullptr
-    );
-    
-    string result = message ? message : "未知錯誤";
-    LocalFree(message);
-    
-    return result + " (錯誤代碼: " + to_string(error_code) + ")";
+// Get the last error message
+std::string TCPSocket::get_last_error() {
+    return strerror(errno);
 }
